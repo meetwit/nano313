@@ -5,13 +5,11 @@
 #include "stm32f10x.h"
 #include "string.h"
 
-extern u16 time_x,time_xx,time_xxx,time_xxxx;		//¼ÇÂ¼hzÊý
+extern rt_timer_t timer1;
 
-
-void get_adc(void* parameter);
-void send_data(void* parameter);
-void get_num(void* parameter);
-
+void loop(void* parameter);
+void refresh_state(void* parameter);
+void timer1_f(void* parameter);
 void time_thread(void* parameter);
 
 #endif

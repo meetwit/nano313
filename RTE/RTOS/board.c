@@ -13,13 +13,6 @@
 #include <rthw.h>
 #include <rtthread.h>
 
-#include "stm32f10x_rcc.h"
-#include "stm32f10x_conf.h"
-#include "stm32f10x_usart.h"
-#include "stm32f10x_gpio.h"
-
-u8 res_t1,flag=0;
-
 #define _SCB_BASE       (0xE000E010UL)
 #define _SYSTICK_CTRL   (*(rt_uint32_t *)(_SCB_BASE + 0x0))
 #define _SYSTICK_LOAD   (*(rt_uint32_t *)(_SCB_BASE + 0x4))
@@ -52,7 +45,7 @@ static uint32_t _SysTick_Config(rt_uint32_t ticks)
 }
 
 #if defined(RT_USING_USER_MAIN) && defined(RT_USING_HEAP)
-#define RT_HEAP_SIZE 1024
+#define RT_HEAP_SIZE 1024*2
 static uint32_t rt_heap[RT_HEAP_SIZE];     // heap default size: 4K(1024 * 4)
 RT_WEAK void *rt_heap_begin_get(void)
 {
@@ -64,111 +57,7 @@ RT_WEAK void *rt_heap_end_get(void)
     return rt_heap + RT_HEAP_SIZE;
 }
 #endif
-void uart_init(u32 bound){
-  //GPIO端口设置
-  GPIO_InitTypeDef GPIO_InitStructure;
-	USART_InitTypeDef USART_InitStructure;
-	NVIC_InitTypeDef NVIC_InitStructure;
-	 
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_GPIOA, ENABLE);	//使能USART1，GPIOA时钟
-  
-	//USART1_TX   GPIOA.9
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9; //PA.9
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
-  GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.9
-   
-  //USART1_RX	  GPIOA.10初始化
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;//PA10
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
-  GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.10  
 
-  //Usart1 NVIC 配置
-  NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;		//子优先级3
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
-	NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
-  
-   //USART 初始化设置
-
-	USART_InitStructure.USART_BaudRate = bound;//串口波特率
-	USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
-	USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
-	USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
-	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
-	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
-
-  USART_Init(USART1, &USART_InitStructure); //初始化串口1
-  USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);//开启串口接受中断
-  USART_Cmd(USART1, ENABLE);                    //使能串口1 
-
-}
-/*
-void rt_hw_console_output(const char *str)
-{
-    rt_size_t i = 0, size = 0;
-    char a = '\r';
-
-    __HAL_UNLOCK(&UartHandle);
-
-    size = rt_strlen(str);
-    for (i = 0; i < size; i++)
-    {
-        if (*(str + i) == '\n')
-        {
-            HAL_UART_Transmit(&UartHandle, (uint8_t *)&a, 1, 1);
-        }
-        HAL_UART_Transmit(&UartHandle, (uint8_t *)(str + i), 1, 1);
-    }
-}
-*/
-
-void rt_hw_console_output(const char *str)
-{
-	rt_size_t i = 0, size = 0;
-    char a = '\r';
-	size = rt_strlen(str);
-    for (i = 0; i < size; i++)
-    {
-        if (*(str + i) == '\n')
-        {
-							USART_SendData(USART1, a);//向串口1发送数据
-							while(USART_GetFlagStatus(USART1,USART_FLAG_TC)!=SET);//等待发送结束
-//            HAL_UART_Transmit(&UartHandle, (uint8_t *)&a, 1, 1);
-        }
-							USART_SendData(USART1, *(str + i));//向串口1发送数据
-							while(USART_GetFlagStatus(USART1,USART_FLAG_TC)!=SET);//等待发送结束
-//        HAL_UART_Transmit(&UartHandle, (uint8_t *)(str + i), 1, 1);
-    }
-//		while(*str !='\0'){
-//		USART_SendData(USART1, *(str++));//向串口1发送数据
-//	while(USART_GetFlagStatus(USART1,USART_FLAG_TC)!=SET);//等待发送结束
-//		}
-}
-
-char rt_hw_console_getchar(void)
-{
-    int ch = -1;
-	while(flag==0){
-		rt_thread_delay(10);
-	}
-	flag = 0;
-	ch = res_t1;
-    return ch;
-}
-
-
-void USART1_IRQHandler(void)
-{
-	rt_enter_critical();
-	if(USART1->SR&(0x1<<5))	//接收到数据
-	{ 
-		res_t1=USART1->DR;
-		flag = 1;
-	}		
-	rt_exit_critical();
-}
 
 /**
  * This function will initial your board.
@@ -180,7 +69,6 @@ void rt_hw_board_init()
     
     /* System Tick Configuration */
     _SysTick_Config(SystemCoreClock / RT_TICK_PER_SECOND);
-		uart_init(115200);
 
     /* Call components board initial (use INIT_BOARD_EXPORT()) */
 #ifdef RT_USING_COMPONENTS_INIT
